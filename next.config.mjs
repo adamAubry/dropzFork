@@ -1,10 +1,16 @@
+import createMDX from '@next/mdx'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Enable MDX support for .mdx files in app directory
+  pageExtensions: ['js', 'jsx', 'md', 'mdx', 'ts', 'tsx'],
   experimental: {
     ppr: false,
     inlineCss: true,
     reactCompiler: true,
+    // MDX is already optimized with React Server Components
+    mdxRs: true,
   },
   typescript: {
     ignoreBuildErrors: true,
@@ -49,4 +55,16 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// Wrap Next.js config with MDX
+const withMDX = createMDX({
+  // Performance optimizations
+  options: {
+    // Optimize MDX compilation
+    remarkPlugins: [],
+    rehypePlugins: [],
+    // Enable strict mode for better error handling
+    development: process.env.NODE_ENV === 'development',
+  },
+})
+
+export default withMDX(nextConfig);
