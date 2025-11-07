@@ -1,25 +1,19 @@
 import { Link } from "@/components/ui/link";
-import { getPlanets, getPlanetDetails } from "@/lib/queries";
+import { getPlanets } from "@/lib/queries";
 
 import Image from "next/image";
 
 export default async function Home() {
-  const [planets, dropCount] = await Promise.all([
-    getPlanets(),
-    getPlanetDetails(),
-  ]);
+  const [planets] = await Promise.all([getPlanets()]);
   let imageCount = 0;
 
   return (
     <div className="w-full p-4">
-      <div className="mb-2 w-full flex-grow border-b-[1px] border-accent1 text-sm font-semibold text-black">
-        Explore {dropCount.at(0)?.count.toLocaleString()} drops
-      </div>
       {planets.map((planet) => (
         <div key={planet.name}>
           <h2 className="text-xl font-semibold">{planet.name}</h2>
           <div className="flex flex-row flex-wrap justify-center gap-2 border-b-2 py-4 sm:justify-start">
-            {planet.categories.map((sea) => (
+            {planet.oceans.map((sea) => (
               <Link
                 prefetch={true}
                 key={sea.name}
