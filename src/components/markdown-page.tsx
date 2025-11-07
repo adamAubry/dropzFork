@@ -1,0 +1,142 @@
+import { readFile } from 'fs/promises'
+import { join } from 'path'
+import { compileMDX } from 'next-mdx-remote/rsc'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import { MDXContent } from './mdx-component'
+import { useMDXComponents } from './mdx-component'
+
+interface MarkdownPageProps {
+  /**
+   * Path to the markdown file relative to the project root
+   * Defaults to 'README.md'
+   */
+  filePath?: string
+  /**
+   * Additional className for the wrapper
+   */
+  className?: string
+}
+
+/**
+ * High-performance server component that renders markdown files
+ * By default, it serves the README.md file from the project root
+ *
+ * @example
+ * ```tsx
+ * // Serves README.md by default
+ * <MarkdownPage />
+ *
+ * // Serve a specific markdown file
+ * <MarkdownPage filePath="docs/getting-started.md" />
+ * ```
+ */
+export async function MarkdownPage({
+  filePath = 'README.md',
+  className,
+}: MarkdownPageProps) {
+  try {
+    // Read the markdown file from the file system
+    const fullPath = join(process.cwd(), filePath)
+    const source = await readFile(fullPath, 'utf-8')
+
+    // Compile MDX with performance optimizations
+    const { content, frontmatter } = await compileMDX({
+      source,
+      options: {
+        parseFrontmatter: true,
+        mdxOptions: {
+          remarkPlugins: [remarkGfm],
+          rehypePlugins: [rehypeHighlight],
+          development: process.env.NODE_ENV === 'development',
+        },
+      },
+      components: useMDXComponents({}),
+    })
+
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        {frontmatter && (
+          <div className="mb-8">
+            {(frontmatter as any).title && (
+              <h1 className="text-4xl font-bold tracking-tight mb-2">
+                {(frontmatter as any).title}
+              </h1>
+            )}
+            {(frontmatter as any).description && (
+              <p className="text-lg text-gray-600 dark:text-gray-400">
+                {(frontmatter as any).description}
+              </p>
+            )}
+          </div>
+        )}
+        <MDXContent className={className}>{content}</MDXContent>
+      </div>
+    )
+  } catch (error) {
+    console.error(`Failed to load markdown file: ${filePath}`, error)
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950 p-6">
+          <h2 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">
+            Error Loading Markdown
+          </h2>
+          <p className="text-red-700 dark:text-red-300">
+            Failed to load markdown file: <code>{filePath}</code>
+          </p>
+          <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+            Make sure the file exists in the project root.
+          </p>
+        </div>
+      </div>
+    )
+  }
+}
+
+/**
+ * Get markdown content as a string (utility function)
+ * Useful for getting markdown content in API routes or server actions
+ */
+export async function getMarkdownContent(
+  filePath: string = 'README.md'
+): Promise<string | null> {
+  try {
+    const fullPath = join(process.cwd(), filePath)
+    const content = await readFile(fullPath, 'utf-8')
+    return content
+  } catch (error) {
+    console.error(`Failed to read markdown file: ${filePath}`, error)
+    return null
+  }
+}
+
+/**
+ * Get compiled MDX with frontmatter
+ * Returns both the compiled content and any frontmatter data
+ */
+export async function getCompiledMarkdown(filePath: string = 'README.md') {
+  try {
+    const source = await getMarkdownContent(filePath)
+
+    if (!source) {
+      return null
+    }
+
+    const result = await compileMDX({
+      source,
+      options: {
+        parseFrontmatter: true,
+        mdxOptions: {
+          remarkPlugins: [remarkGfm],
+          rehypePlugins: [rehypeHighlight],
+        },
+      },
+      components: useMDXComponents({}),
+    })
+
+    return result
+  } catch (error) {
+    console.error(`Failed to compile markdown: ${filePath}`, error)
+    return null
+  }
+}
