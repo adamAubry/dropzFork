@@ -407,7 +407,7 @@ export const getNodeChildren = unstable_cache(
     });
   },
   ["node-children"],
-  { revalidate: 0 } // No cache - always fresh data
+  { revalidate: false } // No cache - always fresh data
 );
 
 /**
@@ -444,7 +444,7 @@ export const getNodeByPath = unstable_cache(
     });
   },
   ["node-by-path"],
-  { revalidate: 0 } // No cache - always fresh data
+  { revalidate: false } // No cache - always fresh data
 );
 
 /**
