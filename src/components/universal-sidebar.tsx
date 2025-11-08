@@ -63,23 +63,22 @@ function CollapsibleSection({ item }: { item: SidebarItem }) {
 export function UniversalSidebar({ parentLink, currentItems }: UniversalSidebarProps) {
   return (
     <aside className="fixed left-0 hidden w-64 min-w-64 max-w-64 overflow-y-auto border-r p-4 md:block md:h-full">
-      {/* Parent link (n-1) */}
+      {/* Parent link (n-1) - just a back button */}
       {parentLink && (
-        <div className="mb-4">
+        <div className="mb-4 pb-4 border-b border-gray-300">
           <Link
             prefetch={true}
             href={parentLink.href}
-            className="flex items-center text-xs text-gray-600 hover:text-accent1 hover:underline"
+            className="flex items-center text-sm text-gray-600 hover:text-accent1 hover:underline font-semibold"
           >
-            <span className="mr-1">←</span>
-            <span>{parentLink.title}</span>
+            {parentLink.title}
           </Link>
         </div>
       )}
 
       {/* Current navigation (n) with children (n+1) */}
       <div>
-        <h2 className="border-b border-accent1 text-sm font-semibold text-accent1">
+        <h2 className="border-b border-accent1 text-sm font-semibold text-accent1 mb-2">
           Navigation
         </h2>
         <ul className="flex flex-col items-start justify-center">
