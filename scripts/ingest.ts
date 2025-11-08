@@ -8,35 +8,33 @@
  *   npm run ingest -- -p my-docs -d ./content --clear
  */
 
-// Load environment variables FIRST before any imports that use them
-import dotenv from "dotenv";
-import path from "path";
+// CRITICAL: Load environment variables BEFORE any other imports
+// This must be the very first thing that happens
+import { config } from "dotenv";
+import { resolve } from "path";
 
-// Load .env file from project root
-const envPath = path.resolve(__dirname, "..", ".env");
+// Load .env from project root
+const envPath = resolve(__dirname, "..", ".env");
 console.log(`📁 Loading .env from: ${envPath}`);
-const result = dotenv.config({ path: envPath });
-
-if (result.error) {
-  console.error("❌ Error loading .env file:", result.error);
-  process.exit(1);
-}
-
-console.log(`✅ .env file loaded`);
+config({ path: envPath });
 
 // Verify database URL is loaded
 if (!process.env.POSTGRES_URL) {
   console.error("❌ Error: POSTGRES_URL environment variable is not set!");
   console.error("   Please check your .env file.");
   console.error(`   Looking for .env at: ${envPath}`);
+  console.error("\nMake sure your .env file contains:");
+  console.error('   POSTGRES_URL="postgresql://..."');
   process.exit(1);
 }
 
 // Show that we have the connection string (masked for security)
 const dbUrl = process.env.POSTGRES_URL;
 const maskedUrl = dbUrl.replace(/(:\/\/)([^:]+):([^@]+)(@)/, '$1***:***$4');
-console.log(`🔗 Database URL loaded: ${maskedUrl}\n`);
+console.log(`✅ .env file loaded`);
+console.log(`🔗 Database URL: ${maskedUrl}\n`);
 
+// NOW we can safely import modules that depend on environment variables
 import { ingestFolder } from "../src/lib/ingestion/ingest-folder";
 import { Command } from "commander";
 
