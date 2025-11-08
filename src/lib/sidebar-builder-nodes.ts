@@ -8,9 +8,9 @@ import {
 
 /**
  * Build sidebar for catch-all route (nodes-based)
- * Parent: Parent node in hierarchy
- * Current (n): Siblings of current node
- * Children (n+1): Children of current node
+ * Parent (n-1): Back button to parent
+ * Current (n+1): Children of current node
+ * Grandchildren (n+2): Children of children
  */
 export async function buildNodesSidebar(
   planetSlug: string,
@@ -24,78 +24,59 @@ export async function buildNodesSidebar(
     return { currentItems: [] };
   }
 
-  // If we're at planet root (no path), show all planets with their children
-  if (path.length === 0) {
-    const planets = await getPlanets();
-    const currentItems: SidebarItem[] = await Promise.all(
-      planets.map(async (p) => {
-        const children = await getNodeChildren(p.id, "");
-        return {
-          id: p.id,
-          title: p.name,
-          href: `/${p.slug}`,
-          children: children.map((child) => ({
-            id: child.id,
-            title: child.title,
-            href: `/${planetSlug}/${child.slug}`,
-          })),
-        };
-      })
-    );
+  // Determine current namespace
+  const currentNamespace = path.length > 0 ? path.join("/") : "";
 
-    return {
-      currentItems,
-    };
-  }
-
-  // Get current node
-  const currentNode = await getNodeByPath(planetSlug, path);
-  if (!currentNode) {
-    return { currentItems: [] };
-  }
-
-  // Get parent node for the parent link
+  // Get parent link (n-1)
   let parentLink: { title: string; href: string } | undefined;
-  if (path.length > 1) {
-    const parentPath = path.slice(0, -1);
-    const parentNode = await getNodeByPath(planetSlug, parentPath);
-    if (parentNode) {
+  if (path.length > 0) {
+    // Has a parent - either another node or planet root
+    if (path.length > 1) {
+      const parentPath = path.slice(0, -1);
+      const parentNode = await getNodeByPath(planetSlug, parentPath);
+      if (parentNode) {
+        parentLink = {
+          title: `← ${parentNode.title}`,
+          href: `/${planetSlug}/${parentPath.join("/")}`,
+        };
+      }
+    } else {
+      // Parent is the planet root
       parentLink = {
-        title: parentNode.title,
-        href: `/${planetSlug}/${parentPath.join("/")}`,
+        title: `← ${planet.name}`,
+        href: `/${planetSlug}`,
       };
     }
   } else {
-    // Parent is the planet root
+    // At planet root, parent is home
     parentLink = {
-      title: planet.name,
-      href: `/${planetSlug}`,
+      title: "← Home",
+      href: "/",
     };
   }
 
-  // Get siblings (nodes at the same level)
-  const parentNamespace = path.length > 1 ? path.slice(0, -1).join("/") : "";
-  const siblings = await getNodeChildren(planet.id, parentNamespace);
+  // Get children (n+1) of current node
+  const children = await getNodeChildren(planet.id, currentNamespace);
 
-  // Build sidebar items with children
+  // Build sidebar items: children (n+1) with grandchildren (n+2)
   const currentItems: SidebarItem[] = await Promise.all(
-    siblings.map(async (sibling) => {
-      const siblingPath = parentNamespace
-        ? `${parentNamespace}/${sibling.slug}`
-        : sibling.slug;
+    children.map(async (child) => {
+      const childNamespace = currentNamespace
+        ? `${currentNamespace}/${child.slug}`
+        : child.slug;
 
-      // Get children of this sibling
-      const children = await getNodeChildren(planet.id, siblingPath);
+      // Get grandchildren (n+2) of this child
+      const grandchildren = await getNodeChildren(planet.id, childNamespace);
 
       return {
-        id: sibling.id,
-        title: sibling.title,
-        href: `/${planetSlug}/${siblingPath}`,
-        children: children.map((child) => ({
-          id: child.id,
-          title: child.title,
-          href: `/${planetSlug}/${siblingPath}/${child.slug}`,
-        })),
+        id: child.id,
+        title: child.title,
+        href: `/${planetSlug}/${childNamespace}`,
+        children: grandchildren.length > 0 ? grandchildren.map((grandchild) => ({
+          id: grandchild.id,
+          title: grandchild.title,
+          href: `/${planetSlug}/${childNamespace}/${grandchild.slug}`,
+        })) : undefined,
       };
     })
   );

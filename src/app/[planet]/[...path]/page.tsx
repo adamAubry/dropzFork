@@ -16,6 +16,8 @@ import { getNodeByPath, getNodeChildren, getPlanetBySlug } from "@/lib/queries-n
 import { MarkdownPage } from "@/components/markdown-page";
 import { Link } from "@/components/ui/link";
 import Image from "next/image";
+import { UniversalSidebar } from "@/components/universal-sidebar";
+import { buildNodesSidebar } from "@/lib/sidebar-builder-nodes";
 
 export const revalidate = 0;
 
@@ -93,12 +95,24 @@ export default async function DynamicPage({
 
   let imageCount = 0;
 
+  // Build sidebar for this level
+  const sidebarData = await buildNodesSidebar(planet, path);
+
   // If no node found and path is empty, show planet root
   if (!node && path.length === 0) {
     const children = await getNodeChildren(planetData.id, "");
 
     return (
-      <div className="container mx-auto p-4 max-w-7xl">
+      <>
+        <UniversalSidebar
+          parentLink={sidebarData.parentLink}
+          currentItems={sidebarData.currentItems}
+        />
+        <main
+          className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 md:pl-64"
+          id="main-content"
+        >
+          <div className="container mx-auto p-4 max-w-7xl">
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-2">🌍 {planetData.name}</h1>
           {planetData.description && (
@@ -129,7 +143,9 @@ export default async function DynamicPage({
             </p>
           </div>
         )}
-      </div>
+          </div>
+        </main>
+      </>
     );
   }
 
@@ -138,7 +154,16 @@ export default async function DynamicPage({
   // If it's a file (drop), render its markdown content
   if (node.type === "file") {
     return (
-      <div className="container mx-auto p-4 max-w-4xl">
+      <>
+        <UniversalSidebar
+          parentLink={sidebarData.parentLink}
+          currentItems={sidebarData.currentItems}
+        />
+        <main
+          className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 md:pl-64"
+          id="main-content"
+        >
+          <div className="container mx-auto p-4 max-w-4xl">
         {/* Breadcrumb navigation */}
         <nav className="mb-6 text-sm text-gray-600 dark:text-gray-400">
           <Link
@@ -191,7 +216,9 @@ export default async function DynamicPage({
             </div>
           )}
         </article>
-      </div>
+          </div>
+        </main>
+      </>
     );
   }
 
@@ -201,7 +228,16 @@ export default async function DynamicPage({
   const children = await getNodeChildren(planetData.id, namespace);
 
   return (
-    <div className="container mx-auto p-4 max-w-7xl">
+    <>
+      <UniversalSidebar
+        parentLink={sidebarData.parentLink}
+        currentItems={sidebarData.currentItems}
+      />
+      <main
+        className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 md:pl-64"
+        id="main-content"
+      >
+        <div className="container mx-auto p-4 max-w-7xl">
       {/* Breadcrumb navigation */}
       <nav className="mb-6 text-sm text-gray-600 dark:text-gray-400">
         <Link
@@ -268,7 +304,9 @@ export default async function DynamicPage({
           </p>
         </div>
       )}
-    </div>
+        </div>
+      </main>
+    </>
   );
 }
 
