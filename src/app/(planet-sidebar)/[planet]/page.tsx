@@ -31,7 +31,13 @@ export default async function Home(props: {
 
   return (
     <>
-      {isOwnWorkspace && <EditingToolbar workspaceSlug={planetSlug} />}
+      {isOwnWorkspace && (
+        <EditingToolbar
+          workspaceSlug={planetSlug}
+          planetId={planet.id}
+          planetName={planet.name}
+        />
+      )}
 
       <main
         className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 md:pl-64"

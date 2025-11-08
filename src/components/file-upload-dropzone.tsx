@@ -9,6 +9,11 @@ interface FileUploadDropzoneProps {
   isActive: boolean;
 }
 
+interface FileWithPath {
+  file: File;
+  relativePath: string;
+}
+
 export function FileUploadDropzone({
   workspaceSlug,
   currentPath,
@@ -16,8 +21,63 @@ export function FileUploadDropzone({
 }: FileUploadDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState("");
   const router = useRouter();
+
+  // Recursively read all files from a directory entry
+  const readDirectory = async (
+    entry: any,
+    basePath: string = ""
+  ): Promise<FileWithPath[]> => {
+    const files: FileWithPath[] = [];
+
+    if (entry.isFile) {
+      const file: File = await new Promise((resolve, reject) => {
+        entry.file(resolve, reject);
+      });
+
+      // Only process markdown files
+      if (/\.mdx?$/i.test(file.name)) {
+        files.push({
+          file,
+          relativePath: basePath,
+        });
+      }
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const entries: any[] = await new Promise((resolve, reject) => {
+        reader.readEntries(resolve, reject);
+      });
+
+      for (const subEntry of entries) {
+        const subPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+        const subFiles = await readDirectory(subEntry, subPath);
+        files.push(...subFiles);
+      }
+    }
+
+    return files;
+  };
+
+  // Get all files from dropped items (handles both files and directories)
+  const getAllFiles = async (
+    dataTransferItems: DataTransferItemList
+  ): Promise<FileWithPath[]> => {
+    const allFiles: FileWithPath[] = [];
+
+    for (let i = 0; i < dataTransferItems.length; i++) {
+      const item = dataTransferItems[i];
+      if (item.kind === "file") {
+        const entry = item.webkitGetAsEntry?.() || item.getAsEntry?.();
+        if (entry) {
+          const files = await readDirectory(entry);
+          allFiles.push(...files);
+        }
+      }
+    }
+
+    return allFiles;
+  };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -30,7 +90,11 @@ export function FileUploadDropzone({
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+
+    // Only set isDragging to false if we're leaving the window entirely
+    if (e.currentTarget === e.target) {
+      setIsDragging(false);
+    }
   }, []);
 
   const handleDrop = useCallback(
@@ -44,27 +108,36 @@ export function FileUploadDropzone({
         return;
       }
 
-      const files = Array.from(e.dataTransfer.files);
-      const markdownFiles = files.filter((f) => /\.mdx?$/i.test(f.name));
-
-      if (markdownFiles.length === 0) {
-        alert("No markdown files found. Please drop .md or .mdx files.");
-        return;
-      }
-
       setUploading(true);
-      setError("");
+      setUploadProgress("Reading files...");
 
       try {
+        // Get all files including from folders
+        const filesWithPaths = await getAllFiles(e.dataTransfer.items);
+
+        if (filesWithPaths.length === 0) {
+          alert("No markdown files found. Please drop .md or .mdx files or folders containing them.");
+          setUploading(false);
+          return;
+        }
+
+        setUploadProgress(`Uploading ${filesWithPaths.length} file(s)...`);
+
         // Process each file
-        for (const file of markdownFiles) {
+        for (let i = 0; i < filesWithPaths.length; i++) {
+          const { file, relativePath } = filesWithPaths[i];
+          setUploadProgress(`Uploading ${i + 1}/${filesWithPaths.length}: ${file.name}`);
+
           const content = await file.text();
 
           // Extract filename without extension for slug
           const slug = file.name.replace(/\.mdx?$/i, "");
 
-          // Determine namespace from current path
-          const namespace = currentPath.join("/");
+          // Combine current path with relative path from dropped folder structure
+          const fullPath = relativePath
+            ? [...currentPath, relativePath].filter(Boolean)
+            : currentPath;
+          const namespace = fullPath.join("/");
 
           // Create the node via API
           const response = await fetch("/api/nodes", {
@@ -88,13 +161,14 @@ export function FileUploadDropzone({
         }
 
         // Refresh the page to show new files
-        alert(`Successfully uploaded ${markdownFiles.length} file(s)!`);
+        alert(`Successfully uploaded ${filesWithPaths.length} file(s)!`);
         router.refresh();
       } catch (err: any) {
-        setError(err.message);
+        console.error("Upload error:", err);
         alert(`Upload failed: ${err.message}`);
       } finally {
         setUploading(false);
+        setUploadProgress("");
       }
     },
     [isActive, currentPath, router]
@@ -116,10 +190,10 @@ export function FileUploadDropzone({
     >
       {isDragging && (
         <div className="absolute inset-0 bg-blue-500 bg-opacity-10 border-4 border-dashed border-blue-500 flex items-center justify-center">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 shadow-2xl">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 shadow-2xl max-w-md">
             <div className="text-center">
               <svg
-                className="mx-auto h-12 w-12 text-blue-500"
+                className="mx-auto h-16 w-16 text-blue-500 mb-4"
                 stroke="currentColor"
                 fill="none"
                 viewBox="0 0 48 48"
@@ -132,11 +206,14 @@ export function FileUploadDropzone({
                   strokeLinejoin="round"
                 />
               </svg>
-              <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-gray-100">
-                Drop Markdown Files Here
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                Drop Files or Folders Here
               </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                .md or .mdx files will be uploaded to: /{currentPath.join("/")}
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">
+                Upload .md or .mdx files
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Upload to: <span className="font-mono text-blue-600 dark:text-blue-400">/{currentPath.join("/") || "root"}</span>
               </p>
             </div>
           </div>
@@ -144,11 +221,16 @@ export function FileUploadDropzone({
       )}
 
       {uploading && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 pointer-events-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 shadow-xl max-w-md">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-              <p className="text-lg font-medium">Uploading files...</p>
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+              <p className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                {uploadProgress || "Uploading..."}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Please wait while we process your files
+              </p>
             </div>
           </div>
         </div>

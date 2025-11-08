@@ -5,12 +5,15 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Edit, Save, X, Upload } from "lucide-react";
 import { FileUploadDropzone } from "./file-upload-dropzone";
+import { EditPlanetName } from "./edit-planet-name";
 
 interface EditingToolbarProps {
   workspaceSlug: string;
+  planetId: number;
+  planetName: string;
 }
 
-export function EditingToolbar({ workspaceSlug }: EditingToolbarProps) {
+export function EditingToolbar({ workspaceSlug, planetId, planetName }: EditingToolbarProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -123,15 +126,28 @@ export function EditingToolbar({ workspaceSlug }: EditingToolbarProps) {
   if (!isEditing) {
     return (
       <div className="fixed bottom-6 right-6 z-50">
-        <Button
-          onClick={handleStartEditing}
-          disabled={loading}
-          size="lg"
-          className="shadow-lg"
-        >
-          <Edit className="w-4 h-4 mr-2" />
-          {loading ? "Starting..." : "Edit Mode"}
-        </Button>
+        <div className="flex flex-col items-end gap-2">
+          <div className="bg-blue-50 dark:bg-blue-900 border-2 border-blue-300 dark:border-blue-700 rounded-lg p-3 shadow-lg max-w-xs">
+            <p className="text-xs text-blue-800 dark:text-blue-200 mb-2">
+              💡 This is your workspace! Enable editing to:
+            </p>
+            <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1 mb-2 ml-4">
+              <li>• Drag & drop files/folders to upload</li>
+              <li>• Edit content inline</li>
+              <li>• Rename your workspace</li>
+              <li>• Create new files & folders</li>
+            </ul>
+          </div>
+          <Button
+            onClick={handleStartEditing}
+            disabled={loading}
+            size="lg"
+            className="shadow-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold animate-pulse"
+          >
+            <Edit className="w-5 h-5 mr-2" />
+            {loading ? "Starting..." : "Enable Edit Mode"}
+          </Button>
+        </div>
       </div>
     );
   }
@@ -144,6 +160,16 @@ export function EditingToolbar({ workspaceSlug }: EditingToolbarProps) {
         isActive={isEditing}
       />
 
+      {/* Top left - Planet name editor */}
+      <div className="fixed top-6 left-6 z-50">
+        <EditPlanetName
+          planetId={planetId}
+          currentName={planetName}
+          currentSlug={workspaceSlug}
+          isEditingActive={isEditing}
+        />
+      </div>
+
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
       <div className="bg-yellow-100 border-2 border-yellow-400 rounded-lg p-4 shadow-lg mb-2 max-w-xs">
         <p className="text-sm font-semibold text-yellow-800 mb-2 flex items-center gap-2">
@@ -155,7 +181,7 @@ export function EditingToolbar({ workspaceSlug }: EditingToolbarProps) {
         </p>
         <p className="text-xs text-yellow-700 flex items-center gap-1">
           <Upload className="w-3 h-3" />
-          Drag & drop .md files to upload
+          Drag & drop files/folders anywhere to upload
         </p>
       </div>
 
