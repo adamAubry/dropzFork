@@ -1,6 +1,7 @@
 import { Link } from "@/components/ui/link";
-import { getPlanetBySlug, getOceans } from "@/lib/queries";
+import { getPlanetBySlug, getOceans, getUser } from "@/lib/queries";
 import Image from "next/image";
+import { EditingToolbar } from "@/components/editing-toolbar";
 
 export const revalidate = 0;
 
@@ -10,6 +11,7 @@ export default async function Home(props: {
   }>;
 }) {
   const planetSlug = decodeURIComponent((await props.params).planet);
+  const user = await getUser();
 
   const planet = await getPlanetBySlug(planetSlug);
 
@@ -24,8 +26,12 @@ export default async function Home(props: {
   const oceans = await getOceans(planet.id);
   let imageCount = 0;
 
+  // Check if this is the user's own workspace
+  const isOwnWorkspace = user && planet.user_id === user.id;
+
   return (
     <>
+      {isOwnWorkspace && <EditingToolbar workspaceSlug={planetSlug} />}
 
       <main
         className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 md:pl-64"

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getUser, getUserWorkspace } from "@/lib/queries";
 import { Link } from "@/components/ui/link";
 import { Button } from "@/components/ui/button";
+import { DeleteProfileButton } from "@/components/delete-profile-button";
 
 export default async function ProfilePage() {
   const user = await getUser();
@@ -106,6 +107,17 @@ export default async function ProfilePage() {
               </form>
             </div>
           )}
+        </div>
+
+        {/* Danger Zone */}
+        <div className="border border-red-300 rounded-lg p-6 bg-red-50 dark:bg-red-900/10">
+          <h2 className="text-xl font-semibold text-red-700 dark:text-red-400 mb-4">
+            Danger Zone
+          </h2>
+          <p className="text-sm text-red-600 dark:text-red-300 mb-4">
+            Deleting your profile will permanently remove your account, workspace, and all associated data. This action cannot be undone.
+          </p>
+          <DeleteProfileButton />
         </div>
       </div>
     </div>
