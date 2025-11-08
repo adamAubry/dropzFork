@@ -17,7 +17,8 @@ interface FileWithPath {
 // Recursively read all files from a directory entry
 async function readDirectory(
   entry: any,
-  basePath: string = ""
+  basePath: string = "",
+  isRoot: boolean = false
 ): Promise<FileWithPath[]> {
   const files: FileWithPath[] = [];
 
@@ -40,8 +41,10 @@ async function readDirectory(
     });
 
     for (const subEntry of entries) {
-      const subPath = basePath ? `${basePath}/${entry.name}` : entry.name;
-      const subFiles = await readDirectory(subEntry, subPath);
+      // For root level dropped folders, don't include the folder name in path
+      // This makes drag-drop behave like "mv folder/* currentDir/"
+      const subPath = isRoot ? basePath : (basePath ? `${basePath}/${entry.name}` : entry.name);
+      const subFiles = await readDirectory(subEntry, subPath, false);
       files.push(...subFiles);
     }
   }
@@ -60,7 +63,9 @@ async function getAllFiles(
     if (item.kind === "file") {
       const entry = item.webkitGetAsEntry?.() || item.getAsEntry?.();
       if (entry) {
-        const files = await readDirectory(entry);
+        // Pass isRoot=true so dropped folders' contents go into current dir
+        // This makes it behave like "mv folder/* ." instead of "mv folder ."
+        const files = await readDirectory(entry, "", true);
         allFiles.push(...files);
       }
     }

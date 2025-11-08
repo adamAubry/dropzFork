@@ -1,5 +1,8 @@
 import { Link } from "@/components/ui/link";
-import { getPlanets, getOceans, getUser, getUserWorkspace } from "@/lib/queries";
+import { db } from "@/db";
+import { planets } from "@/db/schema";
+import { getOceans, getUser, getNodeChildren } from "@/lib/queries";
+import { eq } from "drizzle-orm";
 import Image from "next/image";
 
 export const revalidate = 0;
@@ -22,17 +25,17 @@ export default async function Home() {
     );
   }
 
-  // Get user's workspace
-  const userWorkspace = await getUserWorkspace(user.id);
+  // Get ALL user's planets/workspaces
+  const userPlanets = await db.query.planets.findMany({
+    where: eq(planets.user_id, user.id),
+    orderBy: (planets, { asc }) => [asc(planets.created_at)],
+  });
 
-  // Show only user's planets (for now just their workspace)
-  const planets = userWorkspace ? [userWorkspace] : [];
-
-  // Fetch oceans (root-level folders) for user's planets
-  const planetsWithOceans = await Promise.all(
-    planets.map(async (planet) => ({
+  // Fetch root-level content for each planet
+  const planetsWithContent = await Promise.all(
+    userPlanets.map(async (planet) => ({
       planet,
-      oceans: await getOceans(planet.id),
+      rootNodes: await getNodeChildren(planet.id, ""),
     }))
   );
 
@@ -44,49 +47,59 @@ export default async function Home() {
         className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 md:pl-64"
         id="main-content"
       >
-        <div className="w-full p-4">
-          {planetsWithOceans.length === 0 ? (
-            <div className="text-center py-12">
+        <div className="w-full max-w-7xl mx-auto p-6">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold mb-2">Your Workspaces</h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Manage and explore your content workspaces
+            </p>
+          </div>
+
+          {planetsWithContent.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="text-6xl mb-4">🌍</div>
               <h2 className="text-2xl font-bold mb-4">No Workspace Found</h2>
               <p className="text-gray-600 dark:text-gray-400 mb-6">
                 You don't have a workspace yet. Create one to get started!
               </p>
               <Link href="/profile">
-                <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-                  Go to Profile
+                <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold">
+                  Create Workspace
                 </button>
               </Link>
             </div>
           ) : (
-            <>
-              {planetsWithOceans.map(({ planet, oceans }) => (
-        <div key={planet.name}>
-          <h2 className="text-xl font-semibold">{planet.name}</h2>
-          <div className="flex flex-row flex-wrap justify-center gap-2 border-b-2 py-4 sm:justify-start">
-            {oceans.map((ocean) => (
-              <Link
-                prefetch={true}
-                key={ocean.slug}
-                className="flex w-[125px] flex-col items-center text-center"
-                href={`/${planet.slug}/${ocean.slug}`}
-              >
-                <Image
-                  loading={imageCount++ < 15 ? "eager" : "lazy"}
-                  decoding="sync"
-                  src={ocean.metadata?.image_url ?? "/placeholder.svg"}
-                  alt={`A small picture of ${ocean.title}`}
-                  className="mb-2 h-14 w-14 border hover:bg-accent2"
-                  width={48}
-                  height={48}
-                  quality={65}
-                />
-                <span className="text-xs">{ocean.title}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )))}
-            </>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {planetsWithContent.map(({ planet, rootNodes }) => (
+                <Link
+                  key={planet.id}
+                  href={`/${planet.slug}`}
+                  className="block group"
+                >
+                  <div className="border rounded-lg overflow-hidden hover:shadow-xl transition-shadow bg-white dark:bg-gray-800">
+                    <div className="aspect-video bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                      <div className="text-white text-6xl">🌍</div>
+                    </div>
+                    <div className="p-6">
+                      <h3 className="text-2xl font-bold mb-2 group-hover:text-blue-600 transition-colors">
+                        {planet.name}
+                      </h3>
+                      {planet.description && (
+                        <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
+                          {planet.description}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
+                        <span>{rootNodes.length} item(s)</span>
+                        <span className="text-blue-600 group-hover:underline">
+                          Open →
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
           )}
         </div>
       </main>
