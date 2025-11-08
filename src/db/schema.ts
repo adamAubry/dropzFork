@@ -21,12 +21,15 @@ import { relations } from "drizzle-orm";
 /**
  * Planets: Top-level workspaces/sites (Level 0)
  * Examples: "Documentation Site", "Course Materials", "Knowledge Base"
+ *
+ * USER WORKSPACE: Each user has ONE planet (their personal workspace)
  */
 export const planets = pgTable("planets", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description"),
+  user_id: integer("user_id").references(() => users.id, { onDelete: "cascade" }), // Owner of this workspace
   created_at: timestamp("created_at").notNull().defaultNow(),
   updated_at: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -177,6 +180,9 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: varchar("username", { length: 100 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  email: varchar("email", { length: 255 }),
+  avatar_url: text("avatar_url"),
+  bio: text("bio"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -185,15 +191,98 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
 // ============================================
+// EDITING MODE & BACKUPS
+// ============================================
+
+/**
+ * Editing Sessions: Track when users enter editing mode
+ * Used to manage backup/apply/discard lifecycle
+ */
+export const editingSessions = pgTable("editing_sessions", {
+  id: serial("id").primaryKey(),
+  user_id: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  planet_id: integer("planet_id")
+    .notNull()
+    .references(() => planets.id, { onDelete: "cascade" }),
+  started_at: timestamp("started_at").notNull().defaultNow(),
+  ended_at: timestamp("ended_at"),
+  is_active: boolean("is_active").notNull().default(true),
+});
+
+export type EditingSession = typeof editingSessions.$inferSelect;
+export type NewEditingSession = typeof editingSessions.$inferInsert;
+
+/**
+ * Node Backups: Store snapshots of nodes before editing
+ * Used for restore on discard or history tracking
+ */
+export const nodeBackups = pgTable(
+  "node_backups",
+  {
+    id: serial("id").primaryKey(),
+    session_id: integer("session_id")
+      .notNull()
+      .references(() => editingSessions.id, { onDelete: "cascade" }),
+    node_id: integer("node_id").references(() => nodes.id, { onDelete: "set null" }), // null if node was deleted
+
+    // Snapshot of node data at backup time
+    snapshot: jsonb("snapshot").$type<{
+      planet_id: number;
+      slug: string;
+      title: string;
+      namespace: string;
+      depth: number;
+      file_path: string;
+      type: string;
+      node_type: string | null;
+      content: string | null;
+      parsed_html: string | null;
+      metadata: any;
+      order: number | null;
+      is_index: boolean | null;
+    }>().notNull(),
+
+    backup_type: text("backup_type").notNull(), // 'create' | 'update' | 'delete'
+    created_at: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    sessionIdIdx: index("node_backups_session_id_idx").on(table.session_id),
+    nodeIdIdx: index("node_backups_node_id_idx").on(table.node_id),
+  })
+);
+
+export type NodeBackup = typeof nodeBackups.$inferSelect;
+export type NewNodeBackup = typeof nodeBackups.$inferInsert;
+
+// ============================================
 // RELATIONS
 // ============================================
 
 /**
- * Planet Relations
- * A planet contains many nodes (folders and files)
+ * User Relations
+ * A user can own one planet (workspace) and have multiple editing sessions
  */
-export const planetsRelations = relations(planets, ({ many }) => ({
+export const usersRelations = relations(users, ({ one, many }) => ({
+  planet: one(planets, {
+    fields: [users.id],
+    references: [planets.user_id],
+  }),
+  editingSessions: many(editingSessions),
+}));
+
+/**
+ * Planet Relations
+ * A planet contains many nodes (folders and files) and belongs to a user
+ */
+export const planetsRelations = relations(planets, ({ one, many }) => ({
+  user: one(users, {
+    fields: [planets.user_id],
+    references: [users.id],
+  }),
   nodes: many(nodes),
+  editingSessions: many(editingSessions),
 }));
 
 /**
@@ -223,5 +312,36 @@ export const nodeLinksRelations = relations(nodeLinks, ({ one }) => ({
     fields: [nodeLinks.to_node_id],
     references: [nodes.id],
     relationName: "to",
+  }),
+}));
+
+/**
+ * Editing Session Relations
+ * Track user editing activity and associated backups
+ */
+export const editingSessionsRelations = relations(editingSessions, ({ one, many }) => ({
+  user: one(users, {
+    fields: [editingSessions.user_id],
+    references: [users.id],
+  }),
+  planet: one(planets, {
+    fields: [editingSessions.planet_id],
+    references: [planets.id],
+  }),
+  backups: many(nodeBackups),
+}));
+
+/**
+ * Node Backup Relations
+ * Links backups to their editing sessions and original nodes
+ */
+export const nodeBackupsRelations = relations(nodeBackups, ({ one }) => ({
+  session: one(editingSessions, {
+    fields: [nodeBackups.session_id],
+    references: [editingSessions.id],
+  }),
+  node: one(nodes, {
+    fields: [nodeBackups.node_id],
+    references: [nodes.id],
   }),
 }));

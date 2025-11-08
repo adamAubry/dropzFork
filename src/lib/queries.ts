@@ -13,8 +13,19 @@
 import { cookies } from "next/headers";
 import { verifyToken } from "./session";
 import { db } from "@/db";
-import { nodes, planets, nodeLinks, users, type Node } from "@/db/schema";
-import { eq, and, like, sql } from "drizzle-orm";
+import {
+  nodes,
+  planets,
+  nodeLinks,
+  users,
+  editingSessions,
+  nodeBackups,
+  type Node,
+  type Planet,
+  type EditingSession,
+  type NodeBackup,
+} from "@/db/schema";
+import { eq, and, like, sql, desc } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 
 // ============================================
@@ -54,6 +65,220 @@ export async function getUser() {
   }
 
   return user[0];
+}
+
+/**
+ * Get user's workspace (planet)
+ * Each user has ONE workspace
+ */
+export async function getUserWorkspace(userId: number): Promise<Planet | null> {
+  const workspace = await db.query.planets.findFirst({
+    where: eq(planets.user_id, userId),
+  });
+  return workspace || null;
+}
+
+/**
+ * Create or get user's workspace
+ * Automatically creates a workspace for new users
+ */
+export async function ensureUserWorkspace(userId: number, username: string): Promise<Planet> {
+  // Check if workspace exists
+  let workspace = await getUserWorkspace(userId);
+
+  if (!workspace) {
+    // Create new workspace
+    const slug = `${username}-workspace`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    const [newWorkspace] = await db
+      .insert(planets)
+      .values({
+        name: `${username}'s Workspace`,
+        slug,
+        description: `Personal workspace for ${username}`,
+        user_id: userId,
+      })
+      .returning();
+    workspace = newWorkspace;
+  }
+
+  return workspace;
+}
+
+/**
+ * Update user profile
+ */
+export async function updateUserProfile(
+  userId: number,
+  data: { email?: string; avatar_url?: string; bio?: string }
+) {
+  return await db
+    .update(users)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId))
+    .returning();
+}
+
+// ============================================
+// EDITING MODE QUERIES
+// ============================================
+
+/**
+ * Get active editing session for a user and planet
+ */
+export async function getActiveEditingSession(
+  userId: number,
+  planetId: number
+): Promise<EditingSession | null> {
+  const session = await db.query.editingSessions.findFirst({
+    where: and(
+      eq(editingSessions.user_id, userId),
+      eq(editingSessions.planet_id, planetId),
+      eq(editingSessions.is_active, true)
+    ),
+  });
+  return session || null;
+}
+
+/**
+ * Start editing mode - creates a new editing session
+ */
+export async function startEditingSession(
+  userId: number,
+  planetId: number
+): Promise<EditingSession> {
+  // Check if there's already an active session
+  const existing = await getActiveEditingSession(userId, planetId);
+  if (existing) {
+    return existing;
+  }
+
+  // Create new session
+  const [session] = await db
+    .insert(editingSessions)
+    .values({
+      user_id: userId,
+      planet_id: planetId,
+      is_active: true,
+    })
+    .returning();
+
+  return session;
+}
+
+/**
+ * End editing session (apply changes)
+ */
+export async function endEditingSession(sessionId: number): Promise<void> {
+  await db
+    .update(editingSessions)
+    .set({
+      is_active: false,
+      ended_at: new Date(),
+    })
+    .where(eq(editingSessions.id, sessionId));
+}
+
+/**
+ * Create a backup of a node before modification
+ */
+export async function createNodeBackup(
+  sessionId: number,
+  node: Node,
+  backupType: "create" | "update" | "delete"
+): Promise<NodeBackup> {
+  const [backup] = await db
+    .insert(nodeBackups)
+    .values({
+      session_id: sessionId,
+      node_id: node.id,
+      snapshot: {
+        planet_id: node.planet_id,
+        slug: node.slug,
+        title: node.title,
+        namespace: node.namespace,
+        depth: node.depth,
+        file_path: node.file_path,
+        type: node.type,
+        node_type: node.node_type,
+        content: node.content,
+        parsed_html: node.parsed_html,
+        metadata: node.metadata,
+        order: node.order,
+        is_index: node.is_index,
+      },
+      backup_type: backupType,
+    })
+    .returning();
+
+  return backup;
+}
+
+/**
+ * Get all backups for a session
+ */
+export async function getSessionBackups(sessionId: number): Promise<NodeBackup[]> {
+  return await db.query.nodeBackups.findMany({
+    where: eq(nodeBackups.session_id, sessionId),
+    orderBy: [desc(nodeBackups.created_at)],
+  });
+}
+
+/**
+ * Discard changes - restore from backups and delete session
+ */
+export async function discardEditingSession(sessionId: number): Promise<void> {
+  // Get all backups for this session
+  const backups = await getSessionBackups(sessionId);
+
+  // Restore each backup in reverse order
+  for (const backup of backups.reverse()) {
+    if (backup.backup_type === "create" && backup.node_id) {
+      // Delete the created node
+      await db.delete(nodes).where(eq(nodes.id, backup.node_id));
+    } else if (backup.backup_type === "update" && backup.node_id) {
+      // Restore the original node data
+      await db
+        .update(nodes)
+        .set({
+          slug: backup.snapshot.slug,
+          title: backup.snapshot.title,
+          namespace: backup.snapshot.namespace,
+          depth: backup.snapshot.depth,
+          file_path: backup.snapshot.file_path,
+          type: backup.snapshot.type,
+          node_type: backup.snapshot.node_type,
+          content: backup.snapshot.content,
+          parsed_html: backup.snapshot.parsed_html,
+          metadata: backup.snapshot.metadata,
+          order: backup.snapshot.order,
+          is_index: backup.snapshot.is_index,
+        })
+        .where(eq(nodes.id, backup.node_id));
+    } else if (backup.backup_type === "delete") {
+      // Recreate the deleted node
+      await db.insert(nodes).values({
+        planet_id: backup.snapshot.planet_id,
+        slug: backup.snapshot.slug,
+        title: backup.snapshot.title,
+        namespace: backup.snapshot.namespace,
+        depth: backup.snapshot.depth,
+        file_path: backup.snapshot.file_path,
+        type: backup.snapshot.type,
+        node_type: backup.snapshot.node_type,
+        content: backup.snapshot.content,
+        parsed_html: backup.snapshot.parsed_html,
+        metadata: backup.snapshot.metadata,
+        order: backup.snapshot.order,
+        is_index: backup.snapshot.is_index,
+      });
+    }
+  }
+
+  // Delete the editing session (cascades to backups)
+  await db.delete(editingSessions).where(eq(editingSessions.id, sessionId));
 }
 
 // ============================================

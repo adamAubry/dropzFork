@@ -23,15 +23,20 @@ interface IngestionOptions {
   planetSlug: string;
   rootPath: string;
   clearExisting?: boolean;
+  userId?: number; // Optional: Assign to specific user's workspace
 }
 
 export async function ingestFolder({
   planetSlug,
   rootPath,
   clearExisting = false,
+  userId,
 }: IngestionOptions) {
   console.log(`🌊 Starting ingestion for planet: ${planetSlug}`);
   console.log(`📂 Root path: ${rootPath}`);
+  if (userId) {
+    console.log(`👤 User ID: ${userId}`);
+  }
 
   // Get or create planet
   let planet = await db.query.planets.findFirst({
@@ -46,7 +51,16 @@ export async function ingestFolder({
         name: planetSlug.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
         slug: planetSlug,
         description: `Auto-generated planet from folder ingestion`,
+        user_id: userId || null, // Assign to user if provided
       })
+      .returning();
+  } else if (userId && !planet.user_id) {
+    // Update planet with user_id if it doesn't have one
+    console.log(`🔗 Assigning planet to user ${userId}`);
+    [planet] = await db
+      .update(planets)
+      .set({ user_id: userId })
+      .where(eq(planets.id, planet.id))
       .returning();
   }
 
