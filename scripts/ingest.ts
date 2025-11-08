@@ -14,14 +14,28 @@ import path from "path";
 
 // Load .env file from project root
 const envPath = path.resolve(__dirname, "..", ".env");
-dotenv.config({ path: envPath });
+console.log(`📁 Loading .env from: ${envPath}`);
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.error("❌ Error loading .env file:", result.error);
+  process.exit(1);
+}
+
+console.log(`✅ .env file loaded`);
 
 // Verify database URL is loaded
 if (!process.env.POSTGRES_URL) {
   console.error("❌ Error: POSTGRES_URL environment variable is not set!");
   console.error("   Please check your .env file.");
+  console.error(`   Looking for .env at: ${envPath}`);
   process.exit(1);
 }
+
+// Show that we have the connection string (masked for security)
+const dbUrl = process.env.POSTGRES_URL;
+const maskedUrl = dbUrl.replace(/(:\/\/)([^:]+):([^@]+)(@)/, '$1***:***$4');
+console.log(`🔗 Database URL loaded: ${maskedUrl}\n`);
 
 import { ingestFolder } from "../src/lib/ingestion/ingest-folder";
 import { Command } from "commander";
