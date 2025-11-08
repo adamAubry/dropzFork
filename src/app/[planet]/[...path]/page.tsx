@@ -112,7 +112,13 @@ export default async function DynamicPage({
 
     return (
       <>
-        {isOwnWorkspace && <EditingToolbar workspaceSlug={planet} />}
+        {isOwnWorkspace && (
+          <EditingToolbar
+            workspaceSlug={planet}
+            planetId={planetData.id}
+            planetName={planetData.name}
+          />
+        )}
         <main
           className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 "
           id="main-content"
@@ -158,7 +164,13 @@ export default async function DynamicPage({
   if (node.type === "file") {
     return (
       <>
-        {isOwnWorkspace && <EditingToolbar workspaceSlug={planet} />}
+        {isOwnWorkspace && (
+          <EditingToolbar
+            workspaceSlug={planet}
+            planetId={planetData.id}
+            planetName={planetData.name}
+          />
+        )}
         
         <main
           className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 "
@@ -235,7 +247,13 @@ export default async function DynamicPage({
 
   return (
     <>
-      {isOwnWorkspace && <EditingToolbar workspaceSlug={planet} />}
+      {isOwnWorkspace && (
+        <EditingToolbar
+          workspaceSlug={planet}
+          planetId={planetData.id}
+          planetName={planetData.name}
+        />
+      )}
 
       <main
         className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 "
