@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Edit, Save, X, Plus } from "lucide-react";
+import { Edit, Save, X, Upload } from "lucide-react";
+import { FileUploadDropzone } from "./file-upload-dropzone";
 
 interface EditingToolbarProps {
   workspaceSlug: string;
@@ -12,6 +14,7 @@ export function EditingToolbar({ workspaceSlug }: EditingToolbarProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const pathname = usePathname();
 
   // Check for active editing session on mount
   useEffect(() => {
@@ -112,6 +115,11 @@ export function EditingToolbar({ workspaceSlug }: EditingToolbarProps) {
     }
   };
 
+  // Extract current path from pathname
+  const pathSegments = pathname
+    .split("/")
+    .filter((p) => p && p !== workspaceSlug);
+
   if (!isEditing) {
     return (
       <div className="fixed bottom-6 right-6 z-50">
@@ -129,13 +137,25 @@ export function EditingToolbar({ workspaceSlug }: EditingToolbarProps) {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
-      <div className="bg-yellow-100 border-2 border-yellow-400 rounded-lg p-4 shadow-lg mb-2">
-        <p className="text-sm font-semibold text-yellow-800 mb-2">
+    <>
+      <FileUploadDropzone
+        workspaceSlug={workspaceSlug}
+        currentPath={pathSegments}
+        isActive={isEditing}
+      />
+
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
+      <div className="bg-yellow-100 border-2 border-yellow-400 rounded-lg p-4 shadow-lg mb-2 max-w-xs">
+        <p className="text-sm font-semibold text-yellow-800 mb-2 flex items-center gap-2">
+          <Edit className="w-4 h-4" />
           Editing Mode Active
         </p>
-        <p className="text-xs text-yellow-700">
+        <p className="text-xs text-yellow-700 mb-2">
           Changes are being tracked. Apply or discard when done.
+        </p>
+        <p className="text-xs text-yellow-700 flex items-center gap-1">
+          <Upload className="w-3 h-3" />
+          Drag & drop .md files to upload
         </p>
       </div>
 
@@ -162,5 +182,6 @@ export function EditingToolbar({ workspaceSlug }: EditingToolbarProps) {
         </Button>
       </div>
     </div>
+    </>
   );
 }

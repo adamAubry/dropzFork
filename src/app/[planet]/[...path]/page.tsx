@@ -12,10 +12,11 @@
  */
 
 import { notFound } from "next/navigation";
-import { getNodeByPath, getNodeChildren, getPlanetBySlug } from "@/lib/queries";
+import { getNodeByPath, getNodeChildren, getPlanetBySlug, getUser } from "@/lib/queries";
 import { MarkdownPage } from "@/components/markdown-page";
 import { Link } from "@/components/ui/link";
 import Image from "next/image";
+import { EditingToolbar } from "@/components/editing-toolbar";
 
 export const revalidate = 0;
 
@@ -77,10 +78,14 @@ export default async function DynamicPage({
   params: Promise<{ planet: string; path?: string[] }>;
 }) {
   const { planet, path = [] } = await params;
+  const user = await getUser();
 
   // Get the planet
   const planetData = await getPlanetBySlug(planet);
   if (!planetData) return notFound();
+
+  // Check if this is the user's own workspace
+  const isOwnWorkspace = user && planetData.user_id === user.id;
 
   // CRITICAL: This works for ANY depth!
   // Examples:
@@ -99,6 +104,7 @@ export default async function DynamicPage({
 
     return (
       <>
+        {isOwnWorkspace && <EditingToolbar workspaceSlug={planet} />}
         <main
           className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 "
           id="main-content"
@@ -146,6 +152,7 @@ export default async function DynamicPage({
   if (node.type === "file") {
     return (
       <>
+        {isOwnWorkspace && <EditingToolbar workspaceSlug={planet} />}
         
         <main
           className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 "
@@ -217,8 +224,8 @@ export default async function DynamicPage({
 
   return (
     <>
-      
-    
+      {isOwnWorkspace && <EditingToolbar workspaceSlug={planet} />}
+
       <main
         className="min-h-[calc(100vh-113px)] flex-1 overflow-y-auto p-4 pt-0 "
         id="main-content"
