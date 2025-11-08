@@ -28,7 +28,7 @@ function CollapsibleSection({ item }: { item: SidebarItem }) {
         {hasChildren && (
           <div
             onClick={() => setIsOpen(!isOpen)}
-            className="mr-1 cursor-pointer select-none text-xs"
+            className="mt-1 mr-1 cursor-pointer select-none text-xs"
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
@@ -65,12 +65,13 @@ export function UniversalSidebar({ parentLink, currentItems }: UniversalSidebarP
     <aside className="fixed left-0 hidden w-64 min-w-64 max-w-64 overflow-y-auto border-r p-4 md:block md:h-full">
       {/* Parent link (n-1) - just a back button */}
       {parentLink && (
-        <div className="mb-4 pb-4 border-b border-gray-300">
+        <div className="mb-2 ">
           <Link
             prefetch={true}
             href={parentLink.href}
             className="flex items-center text-sm text-gray-600 hover:text-accent1 hover:underline font-semibold"
           >
+            <div className="pr-2">↪</div>
             {parentLink.title}
           </Link>
         </div>
@@ -78,9 +79,6 @@ export function UniversalSidebar({ parentLink, currentItems }: UniversalSidebarP
 
       {/* Current navigation (n) with children (n+1) */}
       <div>
-        <h2 className="border-b border-accent1 text-sm font-semibold text-accent1 mb-2">
-          Navigation
-        </h2>
         <ul className="flex flex-col items-start justify-center">
           {currentItems.map((item) => (
             <CollapsibleSection key={item.id} item={item} />
