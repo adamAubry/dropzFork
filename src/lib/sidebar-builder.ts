@@ -41,8 +41,8 @@ export async function buildHomeSidebar(): Promise<{
 
 /**
  * Build sidebar for planet page
- * Parent: Home
- * Current (n): Oceans in this planet
+ * Parent (n-1): Just a back link to home
+ * Current (n): Oceans in THIS planet only
  * Children (n+1): Rivers in each ocean
  */
 export async function buildPlanetSidebar(planetSlug: string): Promise<{
@@ -85,7 +85,7 @@ export async function buildPlanetSidebar(planetSlug: string): Promise<{
 
   return {
     parentLink: {
-      title: "All Planets",
+      title: "← Home",
       href: "/",
     },
     currentItems,
@@ -94,8 +94,8 @@ export async function buildPlanetSidebar(planetSlug: string): Promise<{
 
 /**
  * Build sidebar for ocean page
- * Parent: Planet page
- * Current (n): Rivers in this ocean
+ * Parent (n-1): Just a back link to home (since we don't have planet in URL)
+ * Current (n): Rivers in THIS ocean only
  * Children (n+1): Drops in each river
  */
 export async function buildOceanSidebar(
@@ -105,7 +105,6 @@ export async function buildOceanSidebar(
   parentLink?: { title: string; href: string };
   currentItems: SidebarItem[];
 }> {
-  const planet = await getPlanetBySlug(planetSlug);
   const oceanData = await getOcean(oceanSlug);
 
   if (!oceanData) {
@@ -138,20 +137,19 @@ export async function buildOceanSidebar(
   );
 
   return {
-    parentLink: planet
-      ? {
-          title: planet.name,
-          href: `/${planetSlug}`,
-        }
-      : undefined,
+    parentLink: {
+      title: "← Home",
+      href: "/",
+    },
     currentItems,
   };
 }
 
 /**
  * Build sidebar for river page
- * Parent: Ocean page
- * Current (n): Drops in this river
+ * Parent (n-1): Just a back link to ocean
+ * Current (n): Drops in THIS river only
+ * Children (n+1): None (drops don't have children)
  */
 export async function buildRiverSidebar(
   planetSlug: string,
@@ -161,7 +159,6 @@ export async function buildRiverSidebar(
   parentLink?: { title: string; href: string };
   currentItems: SidebarItem[];
 }> {
-  const river = await getRiver(riverSlug);
   const drops = await getDropsForRiver(riverSlug);
 
   const currentItems: SidebarItem[] = drops.map((drop) => ({
@@ -171,20 +168,19 @@ export async function buildRiverSidebar(
   }));
 
   return {
-    parentLink: river
-      ? {
-          title: `${river.name} - ${oceanSlug}`,
-          href: `/drops/${oceanSlug}`,
-        }
-      : undefined,
+    parentLink: {
+      title: "← Ocean",
+      href: `/drops/${oceanSlug}`,
+    },
     currentItems,
   };
 }
 
 /**
  * Build sidebar for drop detail page
- * Parent: River page
- * Current (n): This drop and related drops
+ * Parent (n-1): Just a back link to river
+ * Current (n): All drops in THIS river (siblings)
+ * Children (n+1): None
  */
 export async function buildDropSidebar(
   planetSlug: string,
@@ -195,7 +191,6 @@ export async function buildDropSidebar(
   parentLink?: { title: string; href: string };
   currentItems: SidebarItem[];
 }> {
-  const river = await getRiver(riverSlug);
   const drops = await getDropsForRiver(riverSlug);
 
   const currentItems: SidebarItem[] = drops.map((drop) => ({
@@ -205,12 +200,10 @@ export async function buildDropSidebar(
   }));
 
   return {
-    parentLink: river
-      ? {
-          title: river.title,
-          href: `/drops/${oceanSlug}/${riverSlug}`,
-        }
-      : undefined,
+    parentLink: {
+      title: "← River",
+      href: `/drops/${oceanSlug}/${riverSlug}`,
+    },
     currentItems,
   };
 }
