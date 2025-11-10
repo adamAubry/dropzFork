@@ -381,34 +381,31 @@ export const getPlanetBySlug = unstable_cache(
  * - namespace="courses/cs101/week1" → nodes at that path
  *
  * Works for ANY depth!
+ * No caching - pages are force-dynamic for editing mode
  */
-export const getNodeChildren = unstable_cache(
-  async (
-    planetId: number,
-    namespace: string,
-    type?: "folder" | "file"
-  ): Promise<Node[]> => {
-    const whereConditions: any[] = [
-      eq(nodes.planet_id, planetId),
-      eq(nodes.namespace, namespace),
-    ];
+export async function getNodeChildren(
+  planetId: number,
+  namespace: string,
+  type?: "folder" | "file"
+): Promise<Node[]> {
+  const whereConditions: any[] = [
+    eq(nodes.planet_id, planetId),
+    eq(nodes.namespace, namespace),
+  ];
 
-    if (type) {
-      whereConditions.push(eq(nodes.type, type));
-    }
+  if (type) {
+    whereConditions.push(eq(nodes.type, type));
+  }
 
-    return await db.query.nodes.findMany({
-      where: and(...whereConditions),
-      orderBy: [
-        sql`CASE WHEN ${nodes.type} = 'folder' THEN 0 ELSE 1 END`, // Folders first
-        nodes.order,
-        nodes.title,
-      ],
-    });
-  },
-  ["node-children"],
-  { revalidate: false } // No cache - always fresh data
-);
+  return await db.query.nodes.findMany({
+    where: and(...whereConditions),
+    orderBy: [
+      sql`CASE WHEN ${nodes.type} = 'folder' THEN 0 ELSE 1 END`, // Folders first
+      nodes.order,
+      nodes.title,
+    ],
+  });
+}
 
 /**
  * Get a specific node by path segments
@@ -419,33 +416,30 @@ export const getNodeChildren = unstable_cache(
  * - ["courses", "cs101", "week1", "lecture"] → finds /courses/cs101/week1/lecture
  *
  * O(1) lookup via indexed (planet_id, namespace, slug)!
+ * No caching - pages are force-dynamic for editing mode
  */
-export const getNodeByPath = unstable_cache(
-  async (
-    planetSlug: string,
-    pathSegments: string[]
-  ): Promise<Node | null> => {
-    const planet = await getPlanetBySlug(planetSlug);
-    if (!planet) return null;
+export async function getNodeByPath(
+  planetSlug: string,
+  pathSegments: string[]
+): Promise<Node | null> {
+  const planet = await getPlanetBySlug(planetSlug);
+  if (!planet) return null;
 
-    if (pathSegments.length === 0) {
-      return null; // Root has no node
-    }
+  if (pathSegments.length === 0) {
+    return null; // Root has no node
+  }
 
-    const slug = pathSegments[pathSegments.length - 1];
-    const namespace = pathSegments.slice(0, -1).join("/");
+  const slug = pathSegments[pathSegments.length - 1];
+  const namespace = pathSegments.slice(0, -1).join("/");
 
-    return await db.query.nodes.findFirst({
-      where: and(
-        eq(nodes.planet_id, planet.id),
-        eq(nodes.namespace, namespace),
-        eq(nodes.slug, slug)
-      ),
-    });
-  },
-  ["node-by-path"],
-  { revalidate: false } // No cache - always fresh data
-);
+  return await db.query.nodes.findFirst({
+    where: and(
+      eq(nodes.planet_id, planet.id),
+      eq(nodes.namespace, namespace),
+      eq(nodes.slug, slug)
+    ),
+  });
+}
 
 /**
  * Get breadcrumb trail for a node

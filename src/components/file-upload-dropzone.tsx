@@ -17,8 +17,7 @@ interface FileWithPath {
 // Recursively read all files from a directory entry
 async function readDirectory(
   entry: any,
-  basePath: string = "",
-  isRoot: boolean = false
+  basePath: string = ""
 ): Promise<FileWithPath[]> {
   const files: FileWithPath[] = [];
 
@@ -41,10 +40,9 @@ async function readDirectory(
     });
 
     for (const subEntry of entries) {
-      // For root level dropped folders, don't include the folder name in path
-      // This makes drag-drop behave like "mv folder/* currentDir/"
-      const subPath = isRoot ? basePath : (basePath ? `${basePath}/${entry.name}` : entry.name);
-      const subFiles = await readDirectory(subEntry, subPath, false);
+      // Build path including this directory's name
+      const subPath = basePath ? `${basePath}/${subEntry.name}` : subEntry.name;
+      const subFiles = await readDirectory(subEntry, subPath);
       files.push(...subFiles);
     }
   }
@@ -63,10 +61,23 @@ async function getAllFiles(
     if (item.kind === "file") {
       const entry = item.webkitGetAsEntry?.() || item.getAsEntry?.();
       if (entry) {
-        // Pass isRoot=true so dropped folders' contents go into current dir
-        // This makes it behave like "mv folder/* ." instead of "mv folder ."
-        const files = await readDirectory(entry, "", true);
-        allFiles.push(...files);
+        // For dropped folders, skip the top-level folder name itself
+        // Example: dropping "docs" folder with "guides/setup.md" inside
+        // should create nodes at currentPath/guides/setup.md, not currentPath/docs/guides/setup.md
+        if (entry.isDirectory) {
+          const reader = entry.createReader();
+          const entries: any[] = await new Promise((resolve, reject) => {
+            reader.readEntries(resolve, reject);
+          });
+          for (const subEntry of entries) {
+            const files = await readDirectory(subEntry, subEntry.name);
+            allFiles.push(...files);
+          }
+        } else {
+          // Single file dropped - no folder structure
+          const files = await readDirectory(entry, "");
+          allFiles.push(...files);
+        }
       }
     }
   }
@@ -155,15 +166,20 @@ export function FileUploadDropzone({
         }
 
         // Extract all unique folder paths that need to be created
+        // relativePath includes the filename (e.g., "guides/setup.md")
+        // We need to extract just the directory structure (e.g., "guides")
         const folderPaths = new Set<string>();
         filesWithPaths.forEach(({ relativePath }) => {
           if (relativePath) {
-            // Split the relativePath to get all folder levels
+            // Remove the filename to get just the directory path
             const parts = relativePath.split("/").filter(Boolean);
-            // Add each cumulative path
-            for (let i = 0; i < parts.length; i++) {
-              const folderPath = parts.slice(0, i + 1).join("/");
-              folderPaths.add(folderPath);
+            // Only process if there are directory parts (parts.length > 1 means there's a folder)
+            if (parts.length > 1) {
+              // Don't include the last part (filename)
+              for (let i = 0; i < parts.length - 1; i++) {
+                const folderPath = parts.slice(0, i + 1).join("/");
+                folderPaths.add(folderPath);
+              }
             }
           }
         });
@@ -203,17 +219,22 @@ export function FileUploadDropzone({
               }),
             });
 
-            if (!response.ok) {
-              const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-              console.error(`[ERROR] Failed to create folder ${folderSlug}:`, {
-                status: response.status,
-                statusText: response.statusText,
-                error: data.error,
-                details: data.details
-              });
+            const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
 
-              // Only ignore duplicate errors, throw on everything else
-              if (response.status !== 200 && !data.error?.includes("duplicate")) {
+            if (!response.ok) {
+              // Check if it's a duplicate error (which we can ignore)
+              const isDuplicate = data.error?.toLowerCase().includes("duplicate") ||
+                                 data.error?.toLowerCase().includes("already exists");
+
+              if (isDuplicate) {
+                console.log(`[DEBUG] Folder already exists (skipping): ${folderSlug}`);
+              } else {
+                console.error(`[ERROR] Failed to create folder ${folderSlug}:`, {
+                  status: response.status,
+                  statusText: response.statusText,
+                  error: data.error,
+                  details: data.details
+                });
                 throw new Error(`Failed to create folder "${folderSlug}": ${data.error || response.statusText}`);
               }
             } else {
@@ -227,6 +248,10 @@ export function FileUploadDropzone({
 
         setUploadProgress(`Uploading ${filesWithPaths.length} file(s)...`);
 
+        // Track upload results
+        let filesUploaded = 0;
+        let filesFailed = 0;
+
         // Process each file
         for (let i = 0; i < filesWithPaths.length; i++) {
           const { file, relativePath } = filesWithPaths[i];
@@ -237,42 +262,58 @@ export function FileUploadDropzone({
           // Extract filename without extension for slug
           const slug = file.name.replace(/\.mdx?$/i, "");
 
-          // Combine current path with relative path from dropped folder structure
-          const fullPath = relativePath
-            ? [...currentPath, relativePath].filter(Boolean)
-            : currentPath;
-          const namespace = fullPath.join("/");
+          // Extract directory path from relativePath (which includes the filename)
+          // Example: "guides/setup.md" -> "guides"
+          const pathParts = relativePath ? relativePath.split("/").filter(Boolean) : [];
+          const directoryPath = pathParts.length > 1 ? pathParts.slice(0, -1).join("/") : "";
+
+          // Combine current path with directory path
+          const namespace = [...currentPath, directoryPath]
+            .filter(Boolean)
+            .join("/");
 
           console.log(`[DEBUG] Uploading file: ${file.name}`);
           console.log(`[DEBUG] - slug: ${slug}`);
           console.log(`[DEBUG] - currentPath: ${JSON.stringify(currentPath)}`);
           console.log(`[DEBUG] - relativePath: ${relativePath}`);
-          console.log(`[DEBUG] - fullPath: ${JSON.stringify(fullPath)}`);
+          console.log(`[DEBUG] - directoryPath: ${directoryPath}`);
           console.log(`[DEBUG] - namespace: "${namespace}"`);
 
           // Create the node via API
-          const response = await fetch("/api/nodes", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              slug,
-              title: slug.replace(/-/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase()),
-              namespace,
-              type: "file",
-              content,
-            }),
-          });
+          try {
+            const response = await fetch("/api/nodes", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                slug,
+                title: slug.replace(/-/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase()),
+                namespace,
+                type: "file",
+                content,
+              }),
+            });
 
-          if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || `Failed to upload ${file.name}`);
+            if (!response.ok) {
+              const data = await response.json();
+              console.error(`[ERROR] Failed to upload ${file.name}:`, data.error);
+              filesFailed++;
+            } else {
+              console.log(`[DEBUG] Successfully uploaded: ${file.name}`);
+              filesUploaded++;
+            }
+          } catch (err: any) {
+            console.error(`[ERROR] Exception uploading ${file.name}:`, err);
+            filesFailed++;
           }
         }
 
         // Refresh the page to show new files
-        alert(`Successfully uploaded ${sortedFolderPaths.length} folder(s) and ${filesWithPaths.length} file(s)!`);
+        const message = filesFailed > 0
+          ? `Uploaded ${filesUploaded} file(s) successfully. ${filesFailed} file(s) failed.`
+          : `Successfully uploaded ${sortedFolderPaths.length} folder(s) and ${filesUploaded} file(s)!`;
+        alert(message);
         router.refresh();
       } catch (err: any) {
         console.error("Upload error:", err);
