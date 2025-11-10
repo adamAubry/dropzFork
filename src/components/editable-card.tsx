@@ -33,6 +33,7 @@ export function EditableCard({
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: node.title,
+    slug: node.slug,
     summary: node.metadata?.summary || "",
     cover: node.metadata?.cover || "",
   });
@@ -41,6 +42,18 @@ export function EditableCard({
   const cover = formData.cover || node.metadata?.cover || "/placeholder.svg";
   const summary = formData.summary || node.metadata?.summary || "Explore this content...";
   const icon = node.type === "folder" ? "📁" : "💧";
+
+  // Auto-generate slug from title
+  const handleTitleChange = (newTitle: string) => {
+    setFormData({
+      ...formData,
+      title: newTitle,
+      slug: newTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, ""),
+    });
+  };
 
   const handleSave = async () => {
     setLoading(true);
@@ -52,6 +65,7 @@ export function EditableCard({
         },
         body: JSON.stringify({
           title: formData.title,
+          slug: formData.slug,
           metadata: {
             ...node.metadata,
             summary: formData.summary,
@@ -100,6 +114,7 @@ export function EditableCard({
   const handleCancel = () => {
     setFormData({
       title: node.title,
+      slug: node.slug,
       summary: node.metadata?.summary || "",
       cover: node.metadata?.cover || "",
     });
@@ -147,10 +162,21 @@ export function EditableCard({
             <input
               type="text"
               value={formData.title}
-              onChange={(e) =>
-                setFormData({ ...formData, title: e.target.value })
-              }
+              onChange={(e) => handleTitleChange(e.target.value)}
               className="w-full px-2 py-1 text-sm border rounded font-semibold"
+            />
+          </div>
+
+          {/* Slug (auto-generated, read-only) */}
+          <div>
+            <label className="block text-xs font-medium mb-1">
+              Slug (auto-generated from title)
+            </label>
+            <input
+              type="text"
+              value={formData.slug}
+              readOnly
+              className="w-full px-2 py-1 text-sm border rounded bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400"
             />
           </div>
 
