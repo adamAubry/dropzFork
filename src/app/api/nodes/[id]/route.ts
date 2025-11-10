@@ -100,7 +100,7 @@ export async function PUT(
     await createNodeBackup(session.id, existingNode, "update");
 
     const body = await request.json();
-    const { title, content, metadata, order } = body;
+    const { title, slug, content, metadata, order } = body;
 
     // Process content if it's markdown
     let parsedHtml = existingNode.parsed_html;
@@ -120,6 +120,7 @@ export async function PUT(
       .update(nodes)
       .set({
         title: title || existingNode.title,
+        slug: slug || existingNode.slug,
         content: content || existingNode.content,
         parsed_html: parsedHtml,
         metadata: processedMetadata,
